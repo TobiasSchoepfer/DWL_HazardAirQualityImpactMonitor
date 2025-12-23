@@ -91,8 +91,6 @@ This enables:
 - Post-run inspection
 - Transparency for academic evaluation
 
----
-
 ## Research Question 3 – Operational Exceedance Risk (AWS Lambda: "RQ3")
 
 To address **RQ3**:
