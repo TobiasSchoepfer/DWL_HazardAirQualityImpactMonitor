@@ -1,0 +1,65 @@
+{
+	"jobConfig": {
+		"name": "dw-clean_staging",
+		"description": "",
+		"role": "arn:aws:iam::886452736724:role/AWSGlueRDSExecutionRole",
+		"command": "pythonshell",
+		"version": "3.0",
+		"runtime": null,
+		"workerType": null,
+		"numberOfWorkers": null,
+		"maxCapacity": 0.0625,
+		"jobRunQueuingEnabled": false,
+		"maxRetries": 0,
+		"timeout": 2880,
+		"maxConcurrentRuns": 1,
+		"security": "none",
+		"scriptName": "dw-clean_staging.py",
+		"scriptLocation": "s3://aws-glue-assets-886452736724-us-east-1/scripts/",
+		"language": "python-3.9",
+		"spark": false,
+		"jobParameters": [
+			{
+				"key": "--PGDATABASE",
+				"value": "datalakeproduction1",
+				"existing": false
+			},
+			{
+				"key": "--PGHOST",
+				"value": "datalakeproduction1.cynamiwwmnme.us-east-1.rds.amazonaws.com",
+				"existing": false
+			},
+			{
+				"key": "--PGPASSWORD",
+				"value": "Tokyo1996!!!",
+				"existing": false
+			},
+			{
+				"key": "--PGPORT",
+				"value": "5432",
+				"existing": false
+			},
+			{
+				"key": "--PGUSER",
+				"value": "goutalk",
+				"existing": false
+			}
+		],
+		"tags": [],
+		"jobMode": "DEVELOPER_MODE",
+		"createdOn": "2025-12-07T13:46:11.294Z",
+		"developerMode": true,
+		"connectionsList": [],
+		"temporaryDirectory": "s3://aws-glue-assets-886452736724-us-east-1/temporary/",
+		"glueHiveMetastore": true,
+		"etlAutoTuning": false,
+		"observabilityMetrics": false,
+		"pythonShellPrebuiltLibraryOption": "analytics",
+		"flexExecution": false,
+		"minFlexWorkers": null,
+		"maintenanceWindow": null
+	},
+	"hasBeenSaved": false,
+	"usageProfileName": null,
+	"script": "import pg8000\nimport os\nimport ssl\nimport sys\nfrom awsglue.utils import getResolvedOptions\n\n# SSL context (same as in dw-load_rds)\nssl_ctx = ssl.create_default_context()\nssl_ctx.check_hostname = False\nssl_ctx.verify_mode = ssl.CERT_NONE\n\n\ndef run_statements(cursor, statements):\n    for s in statements:\n        print(f\"Running statement:\\n{s[:120]}...\")\n        cursor.execute(s)\n\n\ndef main():\n    # Read Glue job parameters\n    args = getResolvedOptions(\n        sys.argv,\n        [\"PGHOST\", \"PGPORT\", \"PGDATABASE\", \"PGUSER\", \"PGPASSWORD\"]\n    )\n\n    conn = pg8000.connect(\n        host=args[\"PGHOST\"],\n        database=args[\"PGDATABASE\"],\n        user=args[\"PGUSER\"],\n        password=args[\"PGPASSWORD\"],\n        port=int(args[\"PGPORT\"]),\n        ssl_context=ssl_ctx,\n    )\n    cur = conn.cursor()\n\n    air_quality_sql = [\n        # CREATE TABLE IF NOT EXISTS\n        \"\"\"\n        CREATE TABLE IF NOT EXISTS public.stg_air_quality (\n            city                text,\n            state               text,\n            country             text,\n            latitude            numeric,\n            longitude           numeric,\n            pollution_ts        timestamptz,\n            weather_ts          timestamptz,\n            pollution_aqius     integer,\n            pollution_mainus    text,\n            pollution_aqicn     integer,\n            pollution_maincn    text,\n            weather_ic          text,\n            weather_hu          numeric,\n            weather_pr          numeric,\n            weather_tp          numeric,\n            weather_wd          numeric,\n            weather_ws          numeric,\n            weather_heatindex   numeric\n        );\n        \"\"\",\n        \"TRUNCATE TABLE public.stg_air_quality;\",\n        # INSERT with cleaning rules\n        \"\"\"\n        INSERT INTO public.stg_air_quality (\n            city,\n            state,\n            country,\n            latitude,\n            longitude,\n            pollution_ts,\n            weather_ts,\n            pollution_aqius,\n            pollution_mainus,\n            pollution_aqicn,\n            pollution_maincn,\n            weather_ic,\n            weather_hu,\n            weather_pr,\n            weather_tp,\n            weather_wd,\n            weather_ws,\n            weather_heatindex\n        )\n        SELECT\n            city,\n            state,\n            country,\n            latitude::numeric,\n            longitude::numeric,\n            pollution_ts::timestamptz,\n            weather_ts::timestamptz,\n            pollution_aqius::integer,\n            pollution_mainus,\n            pollution_aqicn::integer,\n            pollution_maincn,\n            weather_ic,\n            weather_hu::numeric,\n            weather_pr::numeric,\n            weather_tp::numeric,\n            weather_wd::numeric,\n            weather_ws::numeric,\n            weather_heatindex::numeric\n        FROM public.air_quality\n        WHERE\n            pollution_ts IS NOT NULL\n            AND latitude IS NOT NULL\n            AND longitude IS NOT NULL\n            AND latitude BETWEEN -90 AND 90\n            AND longitude BETWEEN -180 AND 180\n            AND pollution_aqius IS NOT NULL\n            AND pollution_aqicn IS NOT NULL\n            AND pollution_aqius::numeric BETWEEN 0 AND 500\n            AND pollution_aqicn::numeric BETWEEN 0 AND 500;\n        \"\"\",\n    ]\n\n    earthquakes_sql = [\n    # Ensure we always have a real table, not a view\n    \"DROP TABLE IF EXISTS public.stg_earthquakes CASCADE;\",\n\n    \"\"\"\n    CREATE TABLE public.stg_earthquakes (\n        event_id    text,\n        title       text,\n        place       text,\n        event_time  timestamptz,\n        latitude    numeric,\n        longitude   numeric,\n        magnitude   numeric,\n        depth       numeric\n    );\n    \"\"\",\n\n    \"TRUNCATE TABLE public.stg_earthquakes;\",\n\n    \"\"\"\n    INSERT INTO public.stg_earthquakes (\n        event_id,\n        title,\n        place,\n        event_time,\n        latitude,\n        longitude,\n        magnitude,\n        depth\n    )\n    SELECT\n        e.event_id,\n        e.title,\n        e.place,\n        e.event_time,          -- already cast in subquery\n        e.latitude,\n        e.longitude,\n        e.magnitude,\n        e.depth\n    FROM (\n        SELECT\n            event_id,\n            title,\n            place,\n            time::timestamptz          AS event_time,   -- raw column \"time\"\n            latitude::numeric          AS latitude,\n            longitude::numeric         AS longitude,\n            magnitude::numeric         AS magnitude,\n            depth::numeric             AS depth,\n            ROW_NUMBER() OVER (\n                PARTITION BY event_id\n                ORDER BY time DESC\n            ) AS rn\n        FROM public.earthquakes\n    ) e\n    WHERE\n        e.rn = 1\n        AND e.event_time IS NOT NULL\n        AND e.latitude IS NOT NULL\n        AND e.longitude IS NOT NULL\n        AND e.latitude BETWEEN -90 AND 90\n        AND e.longitude BETWEEN -180 AND 180\n        AND e.magnitude IS NOT NULL\n        AND e.magnitude >= 0\n        AND e.depth IS NOT NULL\n        AND e.depth >= 0;\n    \"\"\",\n    ]\n\n\n    fires_sql = [\n    # Optional: ensure it's a table, not a view\n    \"DROP TABLE IF EXISTS public.stg_fires CASCADE;\",\n\n    \"\"\"\n    CREATE TABLE public.stg_fires (\n        acq_ts      timestamptz,\n        satellite   text,\n        instrument  text,\n        version     text,\n        daynight    text,\n        confidence  integer,\n        bright_ti4  numeric,\n        bright_ti5  numeric,\n        scan        numeric,\n        track       numeric,\n        frp         numeric,\n        latitude    numeric,\n        longitude   numeric\n    );\n    \"\"\",\n\n    \"TRUNCATE TABLE public.stg_fires;\",\n\n    \"\"\"\n    INSERT INTO public.stg_fires (\n        acq_ts,\n        satellite,\n        instrument,\n        version,\n        daynight,\n        confidence,\n        bright_ti4,\n        bright_ti5,\n        scan,\n        track,\n        frp,\n        latitude,\n        longitude\n    )\n    SELECT\n        f.acq_ts,\n        f.satellite,\n        f.instrument,\n        f.version,\n        f.daynight,\n        f.confidence_int,\n        f.bright_ti4,\n        f.bright_ti5,\n        f.scan,\n        f.track,\n        f.frp,\n        f.latitude,\n        f.longitude\n    FROM (\n        SELECT\n            -- Build timestamp from acq_date (date) + acq_time (integer HHMM)\n            (acq_date::date\n             + make_time(acq_time / 100, acq_time % 100, 0)\n            )::timestamptz                        AS acq_ts,\n            satellite,\n            instrument,\n            version,\n            daynight,\n            CASE\n                WHEN confidence ~ '^[0-9]+$' THEN confidence::integer\n                WHEN lower(confidence) = 'low' THEN 25\n                WHEN lower(confidence) = 'nominal' THEN 50\n                WHEN lower(confidence) = 'high' THEN 75\n                ELSE NULL\n            END                                    AS confidence_int,\n            bright_ti4::numeric                    AS bright_ti4,\n            bright_ti5::numeric                    AS bright_ti5,\n            scan::numeric                          AS scan,\n            track::numeric                         AS track,\n            frp::numeric                           AS frp,\n            latitude::numeric                      AS latitude,\n            longitude::numeric                     AS longitude\n        FROM public.fires\n    ) f\n    WHERE\n        f.acq_ts IS NOT NULL\n        AND f.latitude IS NOT NULL\n        AND f.longitude IS NOT NULL\n        AND f.latitude BETWEEN -90 AND 90\n        AND f.longitude BETWEEN -180 AND 180\n        AND f.frp IS NOT NULL\n        AND f.frp >= 0\n        AND (f.bright_ti4 IS NULL OR f.bright_ti4 > 0)\n        AND (f.bright_ti5 IS NULL OR f.bright_ti5 > 0);\n    \"\"\",\n]\n\n\n    try:\n        print(\"Cleaning stg_air_quality...\")\n        run_statements(cur, air_quality_sql)\n\n        print(\"Cleaning stg_earthquakes...\")\n        run_statements(cur, earthquakes_sql)\n\n        print(\"Cleaning stg_fires...\")\n        run_statements(cur, fires_sql)\n\n        conn.commit()\n        print(\"Staging cleaning completed successfully.\")\n    except Exception as e:\n        conn.rollback()\n        print(\"Error during staging cleaning:\", e)\n        raise\n    finally:\n        cur.close()\n        conn.close()\n\n\nif __name__ == \"__main__\":\n    main()\n"
+}

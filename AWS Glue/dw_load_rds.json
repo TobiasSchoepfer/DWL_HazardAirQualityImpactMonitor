@@ -1,0 +1,65 @@
+{
+	"jobConfig": {
+		"name": "dw_load_rds",
+		"description": "",
+		"role": "arn:aws:iam::886452736724:role/AWSGlueRDSExecutionRole",
+		"command": "pythonshell",
+		"version": "3.0",
+		"runtime": null,
+		"workerType": null,
+		"numberOfWorkers": null,
+		"maxCapacity": 0.0625,
+		"jobRunQueuingEnabled": false,
+		"maxRetries": 0,
+		"timeout": 2880,
+		"maxConcurrentRuns": 1,
+		"security": "none",
+		"scriptName": "dw_load_rds.py",
+		"scriptLocation": "s3://aws-glue-assets-886452736724-us-east-1/scripts/",
+		"language": "python-3.9",
+		"spark": false,
+		"jobParameters": [
+			{
+				"key": "--PGDATABASE",
+				"value": "datalakeproduction1",
+				"existing": false
+			},
+			{
+				"key": "--PGHOST",
+				"value": "datalakeproduction1.cynamiwwmnme.us-east-1.rds.amazonaws.com",
+				"existing": false
+			},
+			{
+				"key": "--PGPASSWORD",
+				"value": "Tokyo1996!!!",
+				"existing": false
+			},
+			{
+				"key": "--PGPORT",
+				"value": "5432",
+				"existing": false
+			},
+			{
+				"key": "--PGUSER",
+				"value": "goutalk",
+				"existing": false
+			}
+		],
+		"tags": [],
+		"jobMode": "DEVELOPER_MODE",
+		"createdOn": "2025-11-20T21:21:55.179Z",
+		"developerMode": true,
+		"connectionsList": [],
+		"temporaryDirectory": "s3://aws-glue-assets-886452736724-us-east-1/temporary/",
+		"glueHiveMetastore": true,
+		"etlAutoTuning": false,
+		"observabilityMetrics": false,
+		"pythonShellPrebuiltLibraryOption": "analytics",
+		"flexExecution": false,
+		"minFlexWorkers": null,
+		"maintenanceWindow": null
+	},
+	"hasBeenSaved": false,
+	"usageProfileName": null,
+	"script": "import pg8000\nimport ssl\nimport sys\nfrom awsglue.utils import getResolvedOptions\n\n# SSL context for encrypted connection\nssl_ctx = ssl.create_default_context()\nssl_ctx.check_hostname = False\nssl_ctx.verify_mode = ssl.CERT_NONE\n\n\ndef run_statements(cursor, statements):\n    for s in statements:\n        print(f\"Running statement:\\n{s[:80]}...\")\n        cursor.execute(s)\n\n\ndef main():\n    # Read Glue job parameters\n    args = getResolvedOptions(\n        sys.argv,\n        [\"PGHOST\", \"PGPORT\", \"PGDATABASE\", \"PGUSER\", \"PGPASSWORD\"],\n    )\n\n    # Connect to PostgreSQL with SSL\n    conn = pg8000.connect(\n        host=args[\"PGHOST\"],\n        port=int(args[\"PGPORT\"]),\n        database=args[\"PGDATABASE\"],\n        user=args[\"PGUSER\"],\n        password=args[\"PGPASSWORD\"],\n        ssl_context=ssl_ctx,\n    )\n    cur = conn.cursor()\n\n    # 1) Load dim_date (idempotent, no truncate)\n    dim_date_sql = \"\"\"\n    INSERT INTO dw.dim_date (\n        date_key, date, year, month, day, weekday, week_of_year, quarter\n    )\n    SELECT\n        (EXTRACT(YEAR FROM d)::int * 10000\n         + EXTRACT(MONTH FROM d)::int * 100\n         + EXTRACT(DAY FROM d)::int)  AS date_key,\n        d::date,\n        EXTRACT(YEAR FROM d)::int     AS year,\n        EXTRACT(MONTH FROM d)::int    AS month,\n        EXTRACT(DAY FROM d)::int      AS day,\n        EXTRACT(DOW FROM d)::int      AS weekday,\n        EXTRACT(WEEK FROM d)::int     AS week_of_year,\n        EXTRACT(QUARTER FROM d)::int  AS quarter\n    FROM generate_series(\n            '2010-01-01'::date,\n            '2030-12-31'::date,\n            interval '1 day'\n        ) d\n    ON CONFLICT (date_key) DO NOTHING;\n    \"\"\"\n\n    # 2) Truncate facts + dim_location together (to satisfy FK constraints)\n    truncate_sql = \"\"\"\n    TRUNCATE TABLE\n        dw.fact_air_quality,\n        dw.fact_earthquake,\n        dw.fact_fire_detection,\n        dw.dim_location\n    RESTART IDENTITY;\n    \"\"\"\n\n    # 3) Rebuild dim_location from staging (full refresh, no truncate here)\n    dim_location_sql = \"\"\"\n    INSERT INTO dw.dim_location (city, state, country, latitude, longitude)\n    SELECT DISTINCT\n        city,\n        state,\n        country,\n        latitude,\n        longitude\n    FROM (\n        SELECT city, state, country, latitude, longitude\n        FROM public.stg_air_quality\n\n        UNION\n\n        SELECT\n            NULL AS city,\n            NULL AS state,\n            NULL AS country,\n            latitude,\n            longitude\n        FROM public.stg_earthquakes\n\n        UNION\n\n        SELECT\n            NULL AS city,\n            NULL AS state,\n            NULL AS country,\n            latitude,\n            longitude\n        FROM public.stg_fires\n    ) x\n    WHERE latitude IS NOT NULL\n      AND longitude IS NOT NULL;\n    \"\"\"\n\n    # 4) Load fact tables (only INSERTs, truncation is done centrally)\n\n    fact_air_quality_sql = [\n        \"\"\"\n        INSERT INTO dw.fact_air_quality (\n            date_key,\n            location_key,\n            pollution_ts,\n            weather_ts,\n            pollution_aquis,\n            pollution_mainus,\n            pollution_aqicn,\n            pollution_maincn,\n            weather_ic,\n            weather_hu,\n            weather_pr,\n            weather_tp,\n            weather_wd,\n            weather_ws,\n            weather_heatindex\n        )\n        SELECT\n            (EXTRACT(YEAR FROM aq.pollution_ts)::int * 10000\n             + EXTRACT(MONTH FROM aq.pollution_ts)::int * 100\n             + EXTRACT(DAY FROM aq.pollution_ts)::int)  AS date_key,\n            dl.location_key,\n            aq.pollution_ts,\n            aq.weather_ts,\n            aq.pollution_aqius::integer   AS pollution_aquis,\n            aq.pollution_mainus,\n            aq.pollution_aqicn::integer   AS pollution_aqicn,\n            aq.pollution_maincn,\n            aq.weather_ic,\n            aq.weather_hu,\n            aq.weather_pr,\n            aq.weather_tp,\n            aq.weather_wd,\n            aq.weather_ws,\n            aq.weather_heatindex\n        FROM public.stg_air_quality aq\n        JOIN dw.dim_location dl\n              ON aq.latitude  = dl.latitude\n             AND aq.longitude = dl.longitude;\n        \"\"\",\n    ]\n\n    fact_earthquake_sql = [\n        \"\"\"\n        INSERT INTO dw.fact_earthquake (\n            date_key,\n            location_key,\n            event_id,\n            title,\n            place,\n            event_time,\n            magnitude,\n            depth_km\n        )\n        SELECT\n            (EXTRACT(YEAR FROM eq.event_time)::int * 10000\n             + EXTRACT(MONTH FROM eq.event_time)::int * 100\n             + EXTRACT(DAY FROM eq.event_time)::int)  AS date_key,\n            dl.location_key,\n            eq.event_id,\n            eq.title,\n            eq.place,\n            eq.event_time,\n            eq.magnitude,\n            eq.depth          AS depth_km\n        FROM public.stg_earthquakes eq\n        JOIN dw.dim_location dl\n              ON eq.latitude  = dl.latitude\n             AND eq.longitude = dl.longitude;\n        \"\"\",\n    ]\n\n    fact_fire_sql = [\n        \"\"\"\n        INSERT INTO dw.fact_fire_detection (\n            date_key,\n            location_key,\n            acq_ts,\n            satellite,\n            instrument,\n            version,\n            daynight,\n            confidence,\n            bright_ti4,\n            bright_ti5,\n            scan,\n            track,\n            frp\n        )\n        SELECT\n            (EXTRACT(YEAR FROM f.acq_ts)::int * 10000\n             + EXTRACT(MONTH FROM f.acq_ts)::int * 100\n             + EXTRACT(DAY FROM f.acq_ts)::int)  AS date_key,\n            dl.location_key,\n            f.acq_ts,\n            f.satellite,\n            f.instrument,\n            f.version,\n            f.daynight,\n            f.confidence,\n            f.bright_ti4,\n            f.bright_ti5,\n            f.scan,\n            f.track,\n            f.frp\n        FROM public.stg_fires f\n        JOIN dw.dim_location dl\n              ON f.latitude  = dl.latitude\n             AND f.longitude = dl.longitude;\n        \"\"\",\n    ]\n\n    try:\n        # 1) Ensure dim_date is populated\n        print(\"Loading dim_date...\")\n        cur.execute(dim_date_sql)\n\n        # 2) Truncate facts + dim_location together\n        print(\"Truncating facts and dim_location...\")\n        cur.execute(truncate_sql)\n\n        # 3) Rebuild dim_location\n        print(\"Rebuilding dim_location...\")\n        cur.execute(dim_location_sql)\n\n        # 4) Load facts\n        print(\"Loading fact_air_quality...\")\n        run_statements(cur, fact_air_quality_sql)\n\n        print(\"Loading fact_earthquake...\")\n        run_statements(cur, fact_earthquake_sql)\n\n        print(\"Loading fact_fire_detection...\")\n        run_statements(cur, fact_fire_sql)\n\n        conn.commit()\n        print(\"DW load completed successfully.\")\n    except Exception as e:\n        conn.rollback()\n        print(\"Error during DW load:\", e)\n        raise\n    finally:\n        cur.close()\n        conn.close()\n\n\nif __name__ == \"__main__\":\n    main()\n"
+}
