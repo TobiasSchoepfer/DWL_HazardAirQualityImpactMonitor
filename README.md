@@ -5,8 +5,8 @@ This repository contains the full technical implementation of the semester proje
 The project implements an AWS-based data lake and data warehouse pipeline to ingest, transform, validate, and analyze hazard-related data (earthquakes, fires) together with air-quality observations. The system supports descriptive analytics and a simple operational risk indicator for short-term air-quality exceedances.
 
 ## Repository Structure
+
 DWL_HazardAirQualityImpactMonitor/
-│
 ├── Lambda/
 │   ├── API_Air_Quality/
 │   │   └── lambda_function.py
@@ -23,6 +23,7 @@ DWL_HazardAirQualityImpactMonitor/
 │   └── dw-data_quality.json
 │
 └── README.md
+
 
 ## Architecture Overview
 
