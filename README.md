@@ -5,24 +5,24 @@ This repository contains the full technical implementation of the semester proje
 The project implements an AWS-based data lake and data warehouse pipeline to ingest, transform, validate, and analyze hazard-related data (earthquakes, fires) together with air-quality observations. The system supports descriptive analytics and a simple operational risk indicator for short-term air-quality exceedances.
 
 ## Repository Structure
-DWL_HazardAirQualityImpactMonitor/
-│
-├── Lambda/
-│ ├── API_Air_Quality/
-│ │ └── lambda_function.py
-│ ├── API_Earthquakes/
-│ │ └── lambda_function.py
-│ ├── API_Fires/
-│ │ └── lambda_function.py
-│ └── RQ3/
-│ └── lambda_function.py
-│
-├── AWS_Glue/
-│ ├── dw-clean_staging.json
-│ ├── dw-load_rds.json
-│ └── dw-data_quality.json
-│
-└── README.md
+DWL_HazardAirQualityImpactMonitor/  
+│  
+├── Lambda/  
+│ ├── API_Air_Quality/  
+│ │ └── lambda_function.py  
+│ ├── API_Earthquakes/  
+│ │ └── lambda_function.py  
+│ ├── API_Fires/  
+│ │ └── lambda_function.py  
+│ └── RQ3/  
+│ └── lambda_function.py  
+│  
+├── AWS_Glue/  
+│ ├── dw-clean_staging.json  
+│ ├── dw-load_rds.json  
+│ └── dw-data_quality.json  
+│  
+└── README.md  
 
 ## Architecture Overview
 
@@ -93,13 +93,13 @@ This enables:
 
 ---
 
-## Research Question 3 – Operational Exceedance Risk (AWS Lambda – `RQ3`)
+## Research Question 3 – Operational Exceedance Risk (AWS Lambda: "RQ3")
 
 To address **RQ3**:
 
 > *Can a simple score be derived to estimate the probability that air quality will exceed WHO limits within 72 hours after an event?*
 
-A dedicated Lambda function (`RQ3`) was implemented.
+A dedicated Lambda function ("RQ3") was implemented.
 
 ### Function Logic
 
