@@ -23,6 +23,8 @@ DWL_HazardAirQualityImpactMonitor/
 │   ├── dw-load_rds.json
 │   └── dw-data_quality.json
 │
+├── Project_documentation.pdf
+│
 └── README.md
 ```
 
