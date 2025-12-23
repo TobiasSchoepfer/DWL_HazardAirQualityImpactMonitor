@@ -15,7 +15,7 @@ DWL_HazardAirQualityImpactMonitor/
 │ ├── API_Fires/  
 │ │ └── lambda_function.py  
 │ └── RQ3/  
-│ └── lambda_function.py  
+│   └── lambda_function.py  
 │  
 ├── AWS_Glue/  
 │ ├── dw-clean_staging.json  
