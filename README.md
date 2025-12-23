@@ -6,24 +6,25 @@ The project implements an AWS-based data lake and data warehouse pipeline to ing
 
 ## Repository Structure
 
-DWL_HazardAirQualityImpactMonitor/  
-├── Lambda/  
-│   ├── API_Air_Quality/  
-│   │   └── lambda_function.py  
-│   ├── API_Earthquakes/  
-│   │   └── lambda_function.py  
-│   ├── API_Fires/  
-│   │   └── lambda_function.py  
-│   └── RQ3/  
-│       └── lambda_function.py  
-│  
-├── AWS_Glue/  
-│   ├── dw-clean_staging.json  
-│   ├── dw-load_rds.json  
-│   └── dw-data_quality.json  
-│  
-└── README.md  
-
+```{text}
+DWL_HazardAirQualityImpactMonitor/
+├── Lambda/
+│   ├── API_Air_Quality/
+│   │   └── lambda_function.py
+│   ├── API_Earthquakes/
+│   │   └── lambda_function.py
+│   ├── API_Fires/
+│   │   └── lambda_function.py
+│   └── RQ3/
+│       └── lambda_function.py
+│
+├── AWS_Glue/
+│   ├── dw-clean_staging.json
+│   ├── dw-load_rds.json
+│   └── dw-data_quality.json
+│
+└── README.md
+```
 
 ## Architecture Overview
 
