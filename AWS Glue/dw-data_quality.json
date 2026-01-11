@@ -31,17 +31,17 @@
 			},
 			{
 				"key": "--PGPASSWORD",
-				"value": "Tokyo1996!!!",
+				"value": "************",
 				"existing": false
 			},
 			{
 				"key": "--PGPORT",
-				"value": "5432",
+				"value": "************",
 				"existing": false
 			},
 			{
 				"key": "--PGUSER",
-				"value": "goutalk",
+				"value": "************",
 				"existing": false
 			}
 		],
